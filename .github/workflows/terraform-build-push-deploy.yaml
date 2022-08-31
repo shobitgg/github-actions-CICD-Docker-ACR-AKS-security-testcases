@@ -1,4 +1,4 @@
-name: 4-actions-ci-cd-aks-tf-backend-jobs
+name: terrfaofrm -build0push-deloy
 
 on:
   push:
