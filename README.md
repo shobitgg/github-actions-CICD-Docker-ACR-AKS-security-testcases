@@ -1,4 +1,7 @@
-# Github Action based CICD implementation to Build , Docekrize and Deploy application on AKS
+# Github Action based CICD implementation to Build , Docekrize and Deploy application on AKS and also worked with ArgoCD
+
+![image](https://user-images.githubusercontent.com/41900814/197685185-f1e7a4d9-3db1-411d-a381-bf5e0df376c9.png)
+
 
 ## Build and Dockerize and pish Docker Images to ACR 
 
