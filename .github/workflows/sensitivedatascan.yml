@@ -1,0 +1,44 @@
+
+
+
+name: Sensitive Data Scan
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+jobs:
+  run-nightfalldlp:
+    name: Sensitive Data Scan
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Repo Action
+        uses: actions/checkout@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Sensitive Data Scan Action Step
+        uses: nightfallai/nightfall_dlp_action@v2.0.2
+        env:
+          NIGHTFALL_API_KEY: ${{ secrets.NIGHTFALL_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          BASE_URL: ${{ secrets.GIT_BASE_URL }}
+      - name: "Add error massage in PR comment"
+        uses: actions/github-script@v5
+        if: github.event_name == 'pull_request' && failure()
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ ${{ github.workflow }} failed '
+            })

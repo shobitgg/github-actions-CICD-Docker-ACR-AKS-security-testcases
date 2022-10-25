@@ -1,0 +1,300 @@
+#deployment to AKS cluster
+name: deploy to AKS and test
+on: 
+  workflow_call:
+env:
+  REGISTRY_NAME: mmmazurepetstorecr
+  CLUSTER_NAME: mmm-petstore-aks
+  CLUSTER_RESOURCE_GROUP: dnd-petstore-rg
+  NAMESPACE: dev-petstore
+  SECRET: petstore-aks-secret
+
+  
+#jobs
+jobs:
+  deploy-aks:
+    runs-on: self-hosted
+    name: Deployment to AKS
+    steps:
+      - name: 'Git Checkout'
+        uses: actions/checkout@v2
+
+      
+      - uses: azure/setup-kubectl@v2.0
+
+      - name: Set the target AKS cluster
+        uses: Azure/aks-set-context@v1
+        with:
+          creds: "${{ secrets.AZURE_CREDENTIALS }}"
+          cluster-name: ${{ env.CLUSTER_NAME }}
+          resource-group: ${{ env.CLUSTER_RESOURCE_GROUP }}
+
+      
+      - name: Create namespace if doesn't exist
+        run: |
+          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o json | kubectl apply -f -
+      
+      - name: Create image pull secret for ACR
+        uses: Azure/k8s-create-secret@v1.1
+        with:
+          container-registry-url: ${{ env.REGISTRY_NAME }}.azurecr.io
+          container-registry-username: ${{ secrets.REGISTRY_USERNAME }}
+          container-registry-password: ${{ secrets.REGISTRY_PASSWORD }}
+          namespace: ${{ env.NAMESPACE }}
+          secret-name: ${{ env.SECRET }}
+
+      - name: Deploy to AKS
+        uses: Azure/k8s-deploy@v1
+        with:          
+          manifests: |
+            Kubernetes/deployment.yml
+            Kubernetes/node-istio.yml
+          imagepullsecrets: |
+            ${{ env.SECRET }}
+          namespace: ${{ env.NAMESPACE }}
+
+      - name: Check deployment status 
+        run: |
+          kubectl get deployments -n ${{ env.NAMESPACE }}
+          kubectl get svc -n ${{ env.NAMESPACE }}
+          kubectl get vs -n ${{ env.NAMESPACE }}
+      
+  
+  
+  
+  api-test:
+    runs-on: self-hosted
+    needs: deploy-aks
+    name: API-test
+    steps:
+
+      - name: 'Git Checkout'
+        uses: actions/checkout@v2
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies from requirements.txt
+        run: |  
+          python -m pip install --upgrade pip
+          pip install pytest 
+          
+          git clone https://${{ secrets.GHE_TOKEN }}@github.com/shobitgg/App-MMM-PetstorePOC/petstore-api-test
+          cd petstore-api-test
+          python -m pip install -r requirements.txt
+          cd ..
+     
+      - name: Lint with flake8
+        run: |
+          pip install flake8
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: Make sure pytest is working
+        run: |
+          echo "def test_1(): pass" > nothing.py
+          pytest nothing.py
+      - name: Test with pytest - Petstore API Test 1
+        run: |
+          cd petstore-api-test
+          pytest -vv -rA testCases/devSecOps-petstore/test_cases_petstore.py
+      - name: push reports
+        if: always()
+        run: |
+
+          git clone https://${{ secrets.GHE_TOKEN }}@github.com/shobitgg/App-MMM-PetstorePOC/PetstoreApp-Reports
+          mv /runner/_work/PetstoreApp-Pipeline/PetstoreApp-Pipeline/petstore-api-test/report.html /runner/_work/PetstoreApp-Pipeline/PetstoreApp-Pipeline/PetstoreApp-Reports/api-test-reports
+          git config --global user.email "cporps.cporps@kyndryl.com"
+          git config --global user.name "cporps-cporps"
+          cd PetstoreApp-Reports
+          git add .
+          git commit -m "Added reports for API automation"
+          git push
+          
+
+  ui-auto-test:
+    runs-on: self-hosted
+    needs: [deploy-aks,api-test]
+    name: UI automation test
+    steps:
+
+      - name: 'Git Checkout'
+        uses: actions/checkout@v2
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies from requirements.txt
+        run: |  
+          python -m pip install --upgrade pip
+          pip install pytest 
+          pip install  opencv-python-headless
+          sudo pip install opencv-python
+          pip install selenium
+          pip install webdriver-manager
+          sudo mkdir -p /var/lib/apt/lists/partial
+          sudo apt update
+          sudo apt install -y libsm6 libxext6 ffmpeg libfontconfig1 libxrender1 libgl1-mesa-glx
+          git clone https://${{ secrets.GHE_TOKEN }}@github.kyndryl.ne/App-MMM-PetstorePOC/petstore-ui-auto-test         
+          cd petstore-ui-auto-test
+          python -m pip install -r requirements.txt
+          cd ..
+      - name: empty screenshots folder
+        run: |
+          git config --global user.email "cporps.cporps@kyndryl.com"
+          git config --global user.name "cporps-cporps"
+          cd petstore-ui-auto-test
+          cd screenshots
+          cd test_petstore_welcome_page
+          if ls *.png > /dev/null 2>&1; then rm -f *.png; git add .; git commit -m "remove exisitng screenshots for UI automation"; git push; fi 
+          cd ..   
+          cd ..
+          cd ..
+          
+      - name : install chrome browser
+        run: |
+          sudo apt-get update
+          sudo apt -y --force-yes install fonts-liberation libasound2  libatk-bridge2.0-0 libatk1.0-0  libatspi2.0-0  libcairo2 libcups2 libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 xdg-utils
+          sudo apt -y --force-yes install wget
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo dpkg -i google-chrome-stable_current_amd64.deb
+          sudo apt install -f
+      - name: Make sure pytest is working
+        run: |
+          echo "def test_1(): pass" > nothing.py
+          pytest nothing.py
+      - name: Test with pytest - Petstore UI AUTOMATION Test 1
+        env:
+          PETSTORE_UI_GMAIL_USERNAME: ${{ secrets.PETSTORE_UI_GMAIL_USERNAME }}
+          PETSTORE_UI_GMAIL_PASSWORD: ${{ secrets.PETSTORE_UI_GMAIL_PASSWORD }}
+        run: |
+          cd petstore-ui-auto-test
+          pytest -vv -rA tests/store/petstore/test_petstore_welcome_page.py 
+          git add .
+          git commit -m "pushing pytest results"
+          git push
+          cd ..
+      - name: push reports 
+        if: always()
+        run: |
+          git clone https://${{ secrets.GHE_TOKEN }}@github.com/shobitgg/App-MMM-PetstorePOC/PetstoreApp-Reports
+          git config --global user.email "cporps.cporps@kyndryl.com"
+          git config --global user.name "cporps-cporps"
+          cd PetstoreApp-Reports
+          cd ui-automation-test-reports
+          if [ -d "screenshots" ]; then sudo rm -rf screenshots; git add .; git commit -m "remove exisitng screenshots for UI automation"; git push; fi
+          mv -f /runner/_work/PetstoreApp-Pipeline/PetstoreApp-Pipeline/petstore-ui-auto-test/report/report.html /runner/_work/PetstoreApp-Pipeline/PetstoreApp-Pipeline/PetstoreApp-Reports/ui-automation-test-reports
+          mv -f /runner/_work/PetstoreApp-Pipeline/PetstoreApp-Pipeline/petstore-ui-auto-test/screenshots /runner/_work/PetstoreApp-Pipeline/PetstoreApp-Pipeline/PetstoreApp-Reports/ui-automation-test-reports
+          git add .
+          git commit -m "Added reports for UI automation"
+          git push
+          cd .. 
+          cd ..
+  
+  
+  wapiti-scan:
+    runs-on: self-hosted
+    if: always()
+    needs: [deploy-aks,api-test,ui-auto-test]
+    name: Wapiti Scan
+    steps:
+
+      - name: 'Git Checkout'
+        uses: actions/checkout@v2
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+          
+      - name: Install wapiti
+        run: |
+          python -m pip install wapiti3
+        
+      - name: Wapiti test 
+        run: |
+          wapiti -u https://mmmazurepetstore.azurewebsites.net/
+          
+      - name: print report
+        run: |
+          cat /home/runner/.wapiti/generated_report/*.html
+      - name: push report
+        if: always()
+        run: |
+          
+          git clone https://${{ secrets.GHE_TOKEN }}@github.com/shobitgg/App-MMM-PetstorePOC/PetstoreApp-Reports
+          mv /home/runner/.wapiti/generated_report/*.html /runner/_work/PetstoreApp-Pipeline/PetstoreApp-Pipeline/PetstoreApp-Reports/wapiti-reports
+          git config --global user.email "cporps.cporps@kyndryl.com"
+          git config --global user.name "cporps-cporps"
+          cd PetstoreApp-Reports
+          git add .
+          git commit -m "Added reports for wapiti scanner"
+          git push
+          
+  nuclei:
+    if: always()
+    runs-on: self-hosted
+    needs: [deploy-aks,api-test,ui-auto-test,wapiti-scan]
+    name: Nuclei
+    steps:
+
+      - name: 'Git Checkout'
+        uses: actions/checkout@v2
+
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v3.0.0
+        with:
+          go-version: '1.18.0' 
+      - name: find go version
+        run: go version
+      - name: install nuclei
+        run: |
+          go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
+
+      - name: git clone
+        run: |
+          git config --global user.email "cporps.cporps@kyndryl.com"
+          git config --global user.name "cporps-cporps"
+          git clone https://${{ secrets.GHE_TOKEN }}@github.com/shobitgg/App-MMM-PetstorePOC/petstore-nuclei
+          cd petstore-nuclei
+          if [ -d "nuclei-templates" ]; then rm -rf nuclei-templates; git add .; git commit -m "remove exisitng nuclei-templates"; git push; fi 
+          git clone https://github.com/projectdiscovery/nuclei-templates
+          git add .
+          git commit -m "adding nuclei-templates "
+          git push
+          cd ..
+          
+      - name: Run nuclei test 
+        run: |
+          cd petstore-nuclei
+          git config --global user.email "cporps.cporps@kyndryl.com"
+          git config --global user.name "cporps-cporps"
+          nuclei -list url.txt -t custom-nuclei/ -t nuclei-templates/ -o nuclei-report.txt
+          git add .
+          git commit -m "pushing nuclei results"
+          git push
+          cd ..    
+                
+      - name: push report
+        if: always()
+        run: |
+          NUCLEIFILE=nuclei-report.txt  
+          current_time=$(date "+%d.%m.%Y")
+          NEW_NUCLEIFILENAME=${NUCLEIFILE%.*}_$current_time.${NUCLEIFILE#*.}
+          git clone https://${{ secrets.GHE_TOKEN }}@github.com/shobitgg/App-MMM-PetstorePOC/PetstoreApp-Reports
+          mv /runner/_work/PetstoreApp-Pipeline/PetstoreApp-Pipeline/petstore-nuclei/nuclei-report.txt /runner/_work/PetstoreApp-Pipeline/PetstoreApp-Pipeline/PetstoreApp-Reports/nuclei-reports/$NEW_NUCLEIFILENAME
+          git config --global user.email "cporps.cporps@kyndryl.com"
+          git config --global user.name "cporps-cporps"
+          cd PetstoreApp-Reports
+          git add .
+          git commit -m "Added reports for NUCLEI"
+          git push
+      
+    
+
+

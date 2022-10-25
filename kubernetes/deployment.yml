@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aks-petstoreorderservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aks-petstoreorderservice
+  template:
+    metadata:
+      labels:
+        app: aks-petstoreorderservice
+    spec:
+      containers:
+      - name: aks-petstoreorderservice
+        image: mmmazurepetstorecr.azurecr.io/petstoreorderservice:974282cf9c6465a3372ed276e67a2457b45727cf 
+        ports:
+        - containerPort: 80
+        env:
+        - name: PETSTOREORDERSERVICE_SERVER_PORT
+          value: "80"
+        - name: DEBUG
+          value: "express:*"
+        envFrom:
+        - secretRef:
+            name: mysql-connection-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aks-petstoreorderservice 
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+  selector:
+    app: aks-petstoreorderservice

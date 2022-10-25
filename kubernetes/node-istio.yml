@@ -1,0 +1,35 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: petstore-prod-gateway
+  namespace: dev-petstore
+spec:
+  selector:
+    istio: ingressgateway # use istio default controller
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "mmm-petstore.prod.test-my-code.com"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: petstore-order-service
+  namespace: dev-petstore
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - petstore-prod-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /petstoreorderservice
+    route:
+    - destination:
+        host: aks-petstoreorderservice
+        port:
+          number: 80
