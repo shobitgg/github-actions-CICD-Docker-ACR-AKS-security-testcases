@@ -31,4 +31,7 @@
 
 9. ZAp 
 
-Used Istio Service Mesh for API Gateway and ingress and also used Istio Kiali for mintioring traffic spilt in terms of canary Deployment 
+## Used Istio Service Mesh for API Gateway and ingress and also used Istio Kiali for mintioring traffic spilt in terms of canary Deployment 
+
+![kiali1](https://user-images.githubusercontent.com/41900814/197684860-d6b922d2-2ff9-4470-969d-105346b92461.png)
+
