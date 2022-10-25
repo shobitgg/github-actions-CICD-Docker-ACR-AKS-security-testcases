@@ -1,8 +1,8 @@
 # Github Action based CICD implementation to Build , Docekrize and Deploy application on AKS
 
-Build and Dockerize and pish Docker Images to ACR 
+## Build and Dockerize and pish Docker Images to ACR 
 
-Integration of Security Scan tools 
+## Integration of Security Scan tools 
 
 1.Lint Code Formatting
 
@@ -18,9 +18,9 @@ Integration of Security Scan tools
 
 7.Trivy Containers Scanner
 
-Deploy to AKS using github actions by using Docker image with build id tag from ACR and Deployment yaml.
+## Deploy to AKS using github actions by using Docker image with build id tag from ACR and Deployment yaml.
 
-Post Deployment Test cases Integration and checks :
+## Post Deployment Test cases Integration and checks :
 1. UI test 
  
 3. API Test 
