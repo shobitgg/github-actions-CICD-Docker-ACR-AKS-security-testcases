@@ -30,3 +30,5 @@
 7. Nuclei
 
 9. ZAp 
+
+Used Istio Service Mesh for API Gateway and ingress and also used Istio Kiali for mintioring traffic spilt in terms of canary Deployment 
